@@ -77,7 +77,7 @@ branch:
 
 data:
   train:
-    batch_size: 128
+    batch_size: 32
 
     type: "SiamFC"
 
@@ -115,7 +115,7 @@ data:
         color_jitter: 0.4
 
   val:
-    batch_size: 128
+    batch_size: 32
 
     type: "SiamFC"
 
