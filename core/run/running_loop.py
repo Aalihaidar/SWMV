@@ -95,7 +95,15 @@ class RunTrackerData:
         self.full_image = data['x']
         self.frame_index = data['frame_index']
         
-def run_tracker(model):
+def run_tracker(model,runner,branch_name):
+    device = runner.tracker_evaluator[branch_name].device
+    search_image_curation_parameter_provider  = runner.tracker_evaluator[branch_name].search_curation_parameter_provider
+    search_curation_image_size = runner.tracker_evaluator[branch_name].search_curation_image_size
+    bounding_box_post_processor = runner.tracker_evaluator[branch_name].bounding_box_post_processor
+    post_processor = runner.tracker_evaluator[branch_name].post_processor
+    interpolation_mode = runner.tracker_evaluator[branch_name].interpolation_mode
+    template_curated_image_cache_shape = runner.tracker_evaluator[branch_name].template_curated_image_cache_shape
+
     is_training = False
     model.train(is_training)
     torch.no_grad()
@@ -117,7 +125,7 @@ def run_tracker(model):
                         1.5, (0, 0, 0), 1)
             x, y, w, h = cv.selectROI(display_name, frame, fromCenter=False)
             init_state = [x, y, w, h]
-            full_image = numpy_to_torch(frame_RGB).squeeze(0)
+            full_image = numpy_to_torch(frame_RGB).squeeze(0).to(device=device)
             box_corner = [x,y,x+h-1,y+w-1]
             box = init_state
             box = np.array([
@@ -127,8 +135,8 @@ def run_tracker(model):
             center,target_sz = box[:2], box[2:]
             # exemplar and search sizes
             cfg_context = 0.5
-            cfg_instance_sz = 224
-            cfg_exemplar_sz = 112
+            cfg_instance_sz = search_curation_image_size[0]
+            cfg_exemplar_sz = template_curated_image_cache_shape[3]
             context = cfg_context * np.sum(target_sz)
             z_sz = np.sqrt(np.prod(target_sz + context))
             x_sz = z_sz * \
@@ -156,7 +164,14 @@ def run_tracker(model):
             break
         while True:
             with torch.no_grad():
-                predicted_bounding_box = run_tracking(model, video_data)
+                predicted_bounding_box = run_tracking(model,
+                 video_data,
+                 search_image_curation_parameter_provider,
+                 search_curation_image_size,
+                 bounding_box_post_processor,
+                 post_processor,
+                 interpolation_mode,
+                 device)
                 output_box = predicted_bounding_box[0].to(device = 'cpu').numpy()
                 output_box_int = output_box.astype(int)
                 state = [output_box_int[0],
@@ -285,7 +300,7 @@ class RunnerDriver:
                         epoch_has_training_run = True
                     if (run_in_last_epoch and epoch + 1 == self.n_epochs) or (epoch_interval != 0 and epoch % epoch_interval == 0):
                         # run_iteration(self.model, data_loader, runner, branch_name, event_dispatcher, logger, is_training, epoch)
-                        run_tracker(self.model)
+                        run_tracker(self.model,runner,branch_name)
 
                 if epoch_has_training_run and self.output_path is not None and (epoch % self.dumping_interval == 0 or epoch + 1 == self.n_epochs):
                     model_state_dict = {'version': 2, 'model': get_model(self.model).state_dict()}

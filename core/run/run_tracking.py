@@ -19,57 +19,40 @@ def _run_fn(fn, args):
 
 
         
-def run_tracking( model, TrackerData ):
-
-    search_image_curation_parameter_provider = SiamFCCurationParameterSimpleProvider(4.0,[10, 10])
+def run_tracking( model, TrackerData,search_image_curation_parameter_provider,search_curation_image_size,bounding_box_post_processor,post_processor,interpolation_mode,device ):
     template_image_mean = TrackerData.z_image_mean# data['z_image_mean']
     search_image = TrackerData.full_image# data['x']
-    search_image = search_image.to(device="cuda")
+    search_image = search_image.to(device=device)
 
     if TrackerData.frame_index == 1 :
         tracker_initialization_results = None
         template_object_bbox = TrackerData.z_bbox
         template_curated_image = TrackerData.z_curated
-        template_curated_image = template_curated_image.to(device = "cuda")
+        template_curated_image = template_curated_image.to(device = device)
         search_image_curation_parameter_provider.initialize(template_object_bbox) # # update it with new position (output)
         template_curated_image_cache = template_curated_image.unsqueeze(0)
         initialization_samples = template_curated_image_cache
         tracker_initialization_results = _run_fn(model.initialize, initialization_samples)
         TrackerData.z_feat = tracker_initialization_results
-    else :
-        template_object_bbox = TrackerData.z_bbox
-        search_image_curation_parameter_provider.initialize(template_object_bbox) # # update it with new position (output)
 
-    search_curation_image_size = [224, 224]
     search_image_size = search_image.shape[1:]
-    search_image_size = torch.tensor((search_image_size[1], search_image_size[0]))  # (W, H)
+    search_image_size = torch.tensor((search_image_size[1], search_image_size[0]),device=device)  # (W, H)
     curation_parameter = search_image_curation_parameter_provider.get(search_curation_image_size)
-    curation_parameter_cache = curation_parameter
-    interpolation_mode = 'bilinear'
     search_curated_image_cache,_ = do_SiamFC_curation(search_image, search_curation_image_size, curation_parameter,
                             interpolation_mode, template_image_mean)
     outputs = None
 
     tracking_samples = {
         'z_feat' : TrackerData.z_feat,
-        'x' : search_curated_image_cache.unsqueeze(0)
+        'x' : search_curated_image_cache.unsqueeze(0).to(device=device)
         }
         
     if tracking_samples is not None:
         outputs = _run_fn(model.track, tracking_samples)
-        bbox_normalizer = BoundingBoxNormalizationHelper('[)',[0, 1])
-        bbox_normalizer.offset = 0
-        bbox_normalizer.right_open = True
-        bbox_normalizer.scale = 1
-        input_format = BoundingBoxFormat.CXCYWH
-        bounding_box_post_processor = DefaultBoundingBoxPostProcessor([224, 224],
-        bbox_normalizer,input_format)
-        bounding_box_post_processor.search_region_size = [224, 224]
-        post_processor = ResponseMapTrackingPostProcessing(True,[14,14],0.49)
-        post_processor.to('cuda')
         outputs = post_processor(outputs)
-        predicted_ious, predicted_bounding_boxes = outputs['conf'], outputs['bbox']
+        predicted_iou, predicted_bounding_boxes = outputs['conf'], outputs['bbox']
         predicted_bounding_boxes = predicted_bounding_boxes.to(torch.float64)
-        curation_parameter_cache = curation_parameter_cache.unsqueeze(0).to('cuda')
-        predicted_bounding_boxes = bounding_box_post_processor(predicted_bounding_boxes, curation_parameter_cache[:predicted_bounding_boxes.shape[0], ...])
+        curation_parameter = curation_parameter.unsqueeze(0).to(device=device)
+        predicted_bounding_boxes = bounding_box_post_processor(predicted_bounding_boxes, curation_parameter[:predicted_bounding_boxes.shape[0], ...])
+    search_image_curation_parameter_provider.update(predicted_iou, predicted_bounding_boxes.squeeze(0), search_image_size)
     return predicted_bounding_boxes
