@@ -112,7 +112,7 @@ def run_tracker(model,runner,branch_name):
         model.eval()
 
     #model is ready here
-        video_pth = '/home/lab/Documents/STARK/Stark/videos/DJI_2.mp4'
+        video_pth = 'C:/Users/aalih/Documents/SwinTrack/SWMV/test.mp4'
         cap = cv.VideoCapture(video_pth)
         display_name = 'Display: swinTrack'
         cv.namedWindow(display_name, cv.WINDOW_NORMAL | cv.WINDOW_KEEPRATIO)

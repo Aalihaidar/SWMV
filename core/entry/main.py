@@ -77,7 +77,7 @@ def setup_arg_parser():
     parser.add_argument('--watch_model_freq', default=1000, type=int,
                         help='model watching frequency')
 
-    parser.add_argument('--weight_path', default='/home/lab/Documents/swinTrack/SwinTrack/networks/SwinTrack-Tiny.pth', type=str, help='path to the .pth weight file')
+    parser.add_argument('--weight_path', default='C:/Users/aalih/Documents/SwinTrack/SWMV/SwinTrack-Tiny.pth', type=str, help='path to the .pth weight file')
     # parser.add_argument('--weight_path', type=str, help='path to the .pth weight file')
 
     return parser
